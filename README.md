@@ -48,12 +48,12 @@ tokens, passwords, and credentials inside URLs.
 git clone https://github.com/adi-2602/AI-based-configuration-Reviewer.git
 cd AI-based-configuration-Reviewer
 
-# 2. Create a virtual environment (recommended)
+# 2. Create a virtual environment (recommended; on Windows activate with .venv\Scripts\activate)
 python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 
 # 3. Install
-pip install -r requirements.txt     # or: pip install -e ".[ai]"
+pip install -r requirements.txt
 
 # 4. Review the deliberately insecure examples
 python -m config_reviewer examples/insecure
@@ -188,12 +188,24 @@ This lets you use the tool as a CI gate.
 The AI layer uses the official [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python) and
 the Claude model **`claude-opus-5-5`** by default.
 
-```bash
-pip install anthropic                     # already included in requirements.txt
-export ANTHROPIC_API_KEY="sk-ant-..."     # Windows PowerShell: $env:ANTHROPIC_API_KEY="sk-ant-..."
+**macOS / Linux (bash or zsh):** replace `sk-ant-xxxx` with your real key and run each line on its own:
 
+```bash
+export ANTHROPIC_API_KEY="sk-ant-xxxx"
 python -m config_reviewer examples/insecure --ai
 ```
+
+**Windows PowerShell:**
+
+```powershell
+$env:ANTHROPIC_API_KEY="sk-ant-xxxx"
+python -m config_reviewer examples/insecure --ai
+```
+
+`anthropic` is already in `requirements.txt`. To check the key is set, run `echo $ANTHROPIC_API_KEY`.
+
+> ⚠️ Don't paste `# comments` on the same line as a command. On macOS, zsh doesn't treat `#` as a comment
+> in the terminal, so `export ... # comment` fails with `export: not valid in this context`.
 
 Get an API key at <https://console.anthropic.com/>. Without a key (or without the package), the tool prints a warning
 and continues with the rule engine only, so it never crashes.
