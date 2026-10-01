@@ -1,0 +1,59 @@
+
+examples/insecure/Dockerfile  [dockerfile]
+     -   HIGH      DF002 Container runs as root
+         No USER instruction in the final stage, so the container runs as root.
+         ↳ Fix: Create an unprivileged user and switch to it with `USER appuser` before CMD/ENTRYPOINT.
+     -   LOW       DF006 No HEALTHCHECK defined
+         The image does not define a HEALTHCHECK.
+         ↳ Fix: Add a HEALTHCHECK so the orchestrator can detect and restart unhealthy containers.
+     L2  MEDIUM    DF001 Base image is not pinned
+         Base image 'python:latest' is latest; builds are not reproducible and may pull unexpected changes.
+         ↳ Fix: Pin the base image to a specific version tag (e.g. python:3.12-slim) or, better, a sha256 digest.
+     L3  INFO      DF015 Deprecated MAINTAINER instruction
+         MAINTAINER is deprecated.
+         ↳ Fix: Use `LABEL org.opencontainers.image.authors="..."` instead.
+     L5  CRITICAL  SEC004 Hard-coded password or secret
+         `DB_PASSWORD` has a hard-coded value: ENV DB_PASSWORD=Supe********
+         ↳ Fix: Remove the secret from the file, rotate it immediately (it is in git history), and load it at runtime from a secret manager or CI secret store.
+     L6  CRITICAL  SEC001 AWS access key in file
+         Possible AWS access key ID: ENV AWS_ACCESS_KEY_ID=AKIA********
+         ↳ Fix: Remove the secret from the file, rotate it immediately (it is in git history), and load it at runtime from a secret manager or CI secret store.
+     L8  LOW       DF017 WORKDIR uses a relative path
+         WORKDIR 'app' is relative.
+         ↳ Fix: Use an absolute path for WORKDIR (e.g. /app).
+     L9  LOW       DF003 ADD used instead of COPY
+         `ADD . /app` can be replaced with COPY.
+         ↳ Fix: Use COPY for local files. ADD has implicit tar-extraction and URL behaviour that is easy to misuse.
+    L10  MEDIUM    DF004 Remote file downloaded with ADD
+         ADD fetches a remote URL: https://example.com/install.sh /tmp/install.sh
+         ↳ Fix: Download with curl/wget inside RUN and verify a checksum, or use COPY with a vendored file.
+    L12  MEDIUM    DF012 apt-get update in its own RUN
+         `apt-get update` without an install in the same layer.
+         ↳ Fix: Combine `apt-get update && apt-get install ...` in a single RUN so the package index is never stale (layer cache).
+    L13  LOW       DF010 apt-get install without --no-install-recommends
+         apt-get install pulls in recommended packages.
+         ↳ Fix: Use `apt-get install -y --no-install-recommends` to keep the image small and reduce attack surface.
+    L13  LOW       DF011 apt cache not cleaned
+         Package lists are left in the image layer.
+         ↳ Fix: Finish the same RUN with `&& rm -rf /var/lib/apt/lists/*`.
+    L14  HIGH      DF005 Piping a remote script into a shell
+         Remote script piped directly into a shell.
+         ↳ Fix: Download the script, verify its checksum/signature, then execute it. Never `curl | sh` untrusted content.
+    L15  HIGH      DF009 World-writable permissions (chmod 777)
+         chmod 777 makes files writable by every user.
+         ↳ Fix: Grant the minimum permissions needed (e.g. 755 for directories, 644 for files) and set ownership with --chown.
+    L15  MEDIUM    DF007 sudo used in a RUN instruction
+         `sudo` used during the build.
+         ↳ Fix: Build steps already run as root; drop sudo and avoid installing it in the image.
+    L16  LOW       DF013 pip install without --no-cache-dir
+         pip cache is stored in the image layer.
+         ↳ Fix: Use `pip install --no-cache-dir` to avoid shipping pip's cache in the image.
+    L18  HIGH      DF008 SSH port exposed
+         Port 22 (SSH) is exposed.
+         ↳ Fix: Do not run SSH inside containers. Use `docker exec` / `kubectl exec` for debugging.
+    L19  LOW       DF016 Shell-form CMD/ENTRYPOINT
+         CMD uses shell form; the process runs under /bin/sh -c and will not receive SIGTERM.
+         ↳ Fix: Use the JSON exec form, e.g. CMD ["python", "app.py"], so signals (SIGTERM) reach your process.
+
+Summary: 1 file(s) reviewed, 18 finding(s): 2 critical, 4 high, 4 medium, 7 low, 1 info
+Score:   0/100 (grade F)

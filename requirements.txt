@@ -1,0 +1,3 @@
+PyYAML>=6.0
+# Optional – only needed for the AI deep review (--ai):
+anthropic>=1.0

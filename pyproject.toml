@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-config-reviewer"
+version = "1.0.0"
+description = "AI-powered DevOps configuration reviewer: finds misconfigurations, security issues and best-practice violations."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["PyYAML>=6.0"]
+keywords = ["devops", "security", "docker", "kubernetes", "terraform", "github-actions", "linter", "ai", "claude"]
+
+[project.optional-dependencies]
+ai = ["anthropic>=1.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+config-reviewer = "config_reviewer.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["config_reviewer*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

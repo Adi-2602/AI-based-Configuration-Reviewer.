@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  web:
+    image: nginx
+    privileged: true
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - API_KEY=demo-not-a-real-api-key-123
+
+  db:
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: admin123
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined

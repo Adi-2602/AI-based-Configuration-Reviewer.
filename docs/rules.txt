@@ -1,0 +1,86 @@
+
+[dockerfile]
+  DF001   MEDIUM   best-practice     Base image is not pinned
+  DF002   HIGH     security          Container runs as root
+  DF003   LOW      best-practice     ADD used instead of COPY
+  DF004   MEDIUM   security          Remote file downloaded with ADD
+  DF005   HIGH     security          Piping a remote script into a shell
+  DF006   LOW      reliability       No HEALTHCHECK defined
+  DF007   MEDIUM   security          sudo used in a RUN instruction
+  DF008   HIGH     security          SSH port exposed
+  DF009   HIGH     security          World-writable permissions (chmod 777)
+  DF010   LOW      best-practice     apt-get install without --no-install-recommends
+  DF011   LOW      best-practice     apt cache not cleaned
+  DF012   MEDIUM   reliability       apt-get update in its own RUN
+  DF013   LOW      best-practice     pip install without --no-cache-dir
+  DF014   LOW      misconfiguration  Multiple CMD/ENTRYPOINT instructions
+  DF015   INFO     best-practice     Deprecated MAINTAINER instruction
+  DF016   LOW      reliability       Shell-form CMD/ENTRYPOINT
+  DF017   LOW      best-practice     WORKDIR uses a relative path
+
+[docker-compose]
+  DC001   CRITICAL security          Privileged container
+  DC002   MEDIUM   best-practice     Image is not pinned
+  DC003   HIGH     security          Host network mode
+  DC004   CRITICAL security          Docker socket mounted into a container
+  DC005   HIGH     security          Database port published on all interfaces
+  DC006   LOW      reliability       No restart policy
+  DC007   LOW      reliability       No resource limits
+  DC008   HIGH     security          Dangerous Linux capability added
+  DC009   INFO     reliability       No healthcheck
+  DC010   INFO     best-practice     Obsolete `version` key
+  DC011   HIGH     security          Security options disabled
+  DC012   HIGH     security          Sensitive host path mounted
+
+[kubernetes]
+  K8S001  CRITICAL security          Privileged container
+  K8S002  HIGH     security          Container may run as root
+  K8S003  MEDIUM   security          Privilege escalation allowed
+  K8S004  MEDIUM   reliability       No resource limits
+  K8S005  LOW      reliability       No resource requests
+  K8S006  MEDIUM   best-practice     Image is not pinned
+  K8S007  LOW      reliability       Missing liveness/readiness probe
+  K8S008  HIGH     security          Host namespace shared
+  K8S009  HIGH     security          hostPath volume
+  K8S010  LOW      security          Writable root filesystem
+  K8S011  HIGH     security          Dangerous capability added
+  K8S012  LOW      security          Capabilities not dropped
+  K8S013  INFO     best-practice     Workload in the default namespace
+  K8S014  LOW      reliability       Single replica
+  K8S015  MEDIUM   security          Secret committed in a manifest
+  K8S016  INFO     security          Service exposed externally
+  K8S017  LOW      security          Default service account token mounted
+
+[github-actions]
+  GHA001  MEDIUM   security          Third-party action not pinned to a commit SHA
+  GHA002  HIGH     security          Action pinned to a mutable branch
+  GHA003  MEDIUM   security          No explicit GITHUB_TOKEN permissions
+  GHA004  HIGH     security          Overly broad GITHUB_TOKEN permissions
+  GHA005  HIGH     security          Untrusted input interpolated into a script
+  GHA006  CRITICAL security          pull_request_target checks out untrusted code
+  GHA007  LOW      reliability       Job has no timeout
+  GHA008  HIGH     security          Remote script piped into a shell
+  GHA009  HIGH     security          Secret printed to the log
+  GHA010  MEDIUM   security          Self-hosted runner on a public trigger
+  GHA011  LOW      security          Credentials persisted by actions/checkout
+
+[terraform]
+  TF001   HIGH     security          Ingress open to the whole internet
+  TF002   CRITICAL security          Sensitive port open to the internet
+  TF003   CRITICAL security          Public S3 bucket ACL
+  TF004   HIGH     security          Encryption disabled
+  TF005   HIGH     security          Resource is publicly accessible
+  TF006   MEDIUM   reliability       Deletion protection disabled
+  TF007   LOW      reliability       Final snapshot skipped
+  TF008   HIGH     security          Wildcard IAM policy
+  TF009   LOW      best-practice     Provider versions not pinned
+  TF010   MEDIUM   security          Plain HTTP listener
+  TF011   LOW      security          Logging disabled
+  TF012   MEDIUM   security          Instance metadata v1 allowed
+
+[secrets]
+  SEC001  CRITICAL security          AWS access key in file
+  SEC002  CRITICAL security          Private key in file
+  SEC003  CRITICAL security          API token in file
+  SEC004  CRITICAL security          Hard-coded password or secret
+  SEC005  CRITICAL security          Credentials in connection URL
