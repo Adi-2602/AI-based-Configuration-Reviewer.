@@ -23,21 +23,26 @@ It works in two layers:
 All of them are also scanned for **hard-coded secrets**: AWS keys, private keys, GitHub/Slack/Stripe/Google/Anthropic
 tokens, passwords, and credentials inside URLs.
 
+You can use it from the **command line** or from a **web frontend** in your browser:
+
+![Web UI: the review pipeline, score, severity filters and findings with fixes](docs/web-ui.png)
+
 ---
 
 ## 📑 Table of contents
 
 1. [Quick start](#-quick-start)
-2. [How it works](#-how-it-works)
-3. [Usage](#-usage)
-4. [Enabling the AI review](#-enabling-the-ai-review)
-5. [Output formats & score](#-output-formats--score)
-6. [Built-in rules](#-built-in-rules)
-7. [Using it in CI/CD](#-using-it-in-cicd)
-8. [Project structure](#-project-structure)
-9. [Adding your own rule](#-adding-your-own-rule)
-10. [Running the tests](#-running-the-tests)
-11. [FAQ](#-faq)
+2. [Web frontend](#-web-frontend)
+3. [How it works](#-how-it-works)
+4. [Usage](#-usage)
+5. [Enabling the AI review](#-enabling-the-ai-review)
+6. [Output formats & score](#-output-formats--score)
+7. [Built-in rules](#-built-in-rules)
+8. [Using it in CI/CD](#-using-it-in-cicd)
+9. [Project structure](#-project-structure)
+10. [Adding your own rule](#-adding-your-own-rule)
+11. [Running the tests](#-running-the-tests)
+12. [FAQ](#-faq)
 
 ---
 
@@ -60,6 +65,9 @@ python -m config_reviewer examples/insecure
 
 # 5. ...and the hardened versions of the same files (no issues)
 python -m config_reviewer examples/secure
+
+# 6. Or open the web frontend, then visit http://127.0.0.1:8000
+python -m config_reviewer.web
 ```
 
 Requires **Python 3.10+**. After `pip install -e .` you can also use the short command `config-reviewer`.
@@ -87,6 +95,55 @@ Score:   0/100 (grade F)
 
 Full sample reports are in [`docs/sample-output.txt`](docs/sample-output.txt) and
 [`docs/sample-report.md`](docs/sample-report.md).
+
+---
+
+## 🖥 Web frontend
+
+A browser UI built on the same engine. It shows the review pipeline from the architecture diagram live:
+**Input → Detect → Rule engine + AI review → Score → Report**.
+
+```bash
+python -m config_reviewer.web
+```
+
+Then open **http://127.0.0.1:8000** in your browser. Stop the server with `Ctrl+C`.
+
+To use the AI review in the web UI, set the key **before** starting the server (see
+[Enabling the AI review](#-enabling-the-ai-review)):
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-xxxx"
+python -m config_reviewer.web
+```
+
+What you can do in it:
+
+| Feature | How |
+|---|---|
+| **Add files** | Drag & drop files, choose a whole folder, paste a config, or load the bundled examples |
+| **Watch the pipeline** | The stage cards light up and show live counts: files, detected types, findings, score |
+| **Read results** | Score ring, A–F grade, and one card per file with every finding, its line number and the fix |
+| **Filter** | Click a severity chip to hide or show it, search the text, or show AI findings only |
+| **See the code** | Click a finding to open the **Source** tab with the problem lines highlighted |
+| **Download** | JSON, Markdown or SARIF report |
+| **Browse rules** | The **Rules** tab lists all 74 rules with search and a file-type filter |
+
+Other options: `python -m config_reviewer.web --port 9000`. After `pip install -e .`, the short command
+`config-reviewer-web` also works.
+
+Privacy: uploaded files are reviewed in memory and never saved. The server listens on `127.0.0.1`, so only your
+computer can reach it. It has no login, so don't expose it with `--host 0.0.0.0` on a shared network.
+
+**API** (used by the frontend; handy for scripts):
+
+| Endpoint | What it does |
+|---|---|
+| `GET /api/status` | Version, rule count, whether AI review is available |
+| `GET /api/rules` | All rules |
+| `GET /api/examples` | The bundled example files |
+| `POST /api/review` | Body `{"files": [{"name": "Dockerfile", "content": "..."}], "ai": false}` → findings, score, grade |
+| `POST /api/export` | Body `{"format": "markdown" \| "sarif" \| "json", "result": <review result>}` → report file |
 
 ---
 
@@ -431,6 +488,9 @@ AI-based-configuration-Reviewer/
 │   ├── ai_reviewer.py            # Claude integration (prompt, JSON schema, error handling)
 │   ├── models.py                 # Severity, Rule, Finding, FileReport, ReviewResult (score/grade)
 │   ├── reporters.py              # text / json / markdown / sarif output
+│   ├── web/                      # web frontend
+│   │   ├── app.py                # Flask server + JSON API
+│   │   └── static/               # index.html, app.css, app.js (no build step)
 │   └── analyzers/
 │       ├── __init__.py           # analyzer registry
 │       ├── base.py               # Analyzer base class + helpers (line lookup, image tag check)
@@ -443,10 +503,10 @@ AI-based-configuration-Reviewer/
 ├── examples/
 │   ├── insecure/                 # deliberately broken files: try the tool on these
 │   └── secure/                   # hardened versions: should produce no findings
-├── tests/                        # pytest suite (30 tests, AI layer tested with a fake client)
-├── docs/                         # sample outputs + rule list
+├── tests/                        # pytest suite (42 tests; AI layer tested with a fake client)
+├── docs/                         # sample outputs, rule list, web UI screenshot
 ├── .github/workflows/tests.yml   # CI for this repo
-├── pyproject.toml                # packaging + `config-reviewer` command
+├── pyproject.toml                # packaging + `config-reviewer` / `config-reviewer-web` commands
 ├── requirements.txt / requirements-dev.txt
 └── LICENSE (MIT)
 ```
@@ -486,7 +546,7 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
-The AI tests use a fake Anthropic client, so they need **no API key and no network**.
+The AI and web tests use a fake Anthropic client and Flask's test client, so they need **no API key and no network**.
 
 ---
 

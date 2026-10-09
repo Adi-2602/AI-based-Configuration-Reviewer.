@@ -9,7 +9,7 @@ description = "AI-powered DevOps configuration reviewer: finds misconfigurations
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-dependencies = ["PyYAML>=6.0"]
+dependencies = ["PyYAML>=6.0", "Flask>=3.0"]
 keywords = ["devops", "security", "docker", "kubernetes", "terraform", "github-actions", "linter", "ai", "claude"]
 
 [project.optional-dependencies]
@@ -18,9 +18,13 @@ dev = ["pytest>=8.0"]
 
 [project.scripts]
 config-reviewer = "config_reviewer.cli:main"
+config-reviewer-web = "config_reviewer.web.app:main"
 
 [tool.setuptools.packages.find]
 include = ["config_reviewer*"]
+
+[tool.setuptools.package-data]
+"config_reviewer.web" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

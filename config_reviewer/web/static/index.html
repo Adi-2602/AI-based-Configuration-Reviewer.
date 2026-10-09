@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Config Reviewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2310192B'/%3E%3Cpath d='M9 17l5 5 9-11' stroke='%23F08A3C' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#1B2840"/><path d="M9 17l5 5 9-11" stroke="#F08A3C" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <div>
+        <div class="brand-name">AI Config Reviewer</div>
+        <div class="brand-sub">DevOps misconfiguration &amp; security scanner</div>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="review" role="tab">Review</button>
+      <button class="tab" data-view="rules" role="tab">Rules</button>
+      <button class="tab" data-view="about" role="tab">How it works</button>
+    </nav>
+    <div id="ai-pill" class="pill pill-muted" title="">AI: checking…</div>
+  </header>
+
+  <main>
+    <!-- ============================== REVIEW ============================== -->
+    <section id="view-review" class="view">
+      <ol class="pipeline" id="pipeline" aria-label="Review pipeline">
+        <li class="stage" data-stage="input"><span class="stage-name">Input</span><span class="stage-metric" id="m-input">Add files</span></li>
+        <li class="arrow" aria-hidden="true"></li>
+        <li class="stage" data-stage="detect"><span class="stage-name">Detect</span><span class="stage-metric" id="m-detect">File types</span></li>
+        <li class="arrow" aria-hidden="true"></li>
+        <li class="stage-split">
+          <div class="stage rules" data-stage="rules"><span class="stage-name">Rule engine</span><span class="stage-metric" id="m-rules">74 rules + secrets</span></div>
+          <div class="stage ai" data-stage="ai"><span class="stage-name">AI review</span><span class="stage-metric" id="m-ai">Off</span></div>
+        </li>
+        <li class="arrow" aria-hidden="true"></li>
+        <li class="stage" data-stage="score"><span class="stage-name">Score</span><span class="stage-metric" id="m-score">0–100, A–F</span></li>
+        <li class="arrow" aria-hidden="true"></li>
+        <li class="stage dark" data-stage="report"><span class="stage-name">Report</span><span class="stage-metric" id="m-report">JSON · MD · SARIF</span></li>
+      </ol>
+
+      <div class="layout">
+        <!-- ---------- Input panel ---------- -->
+        <aside class="panel input-panel">
+          <h2 class="panel-title">1. Add configuration files</h2>
+          <div class="seg" role="tablist">
+            <button class="seg-btn active" data-input="upload">Upload</button>
+            <button class="seg-btn" data-input="paste">Paste</button>
+            <button class="seg-btn" data-input="examples">Examples</button>
+          </div>
+
+          <div class="input-pane" data-pane="upload">
+            <label id="dropzone" class="dropzone" tabindex="0">
+              <input id="file-input" type="file" multiple hidden>
+              <strong>Drop files here</strong>
+              <span>or click to choose files</span>
+              <span class="hint">Dockerfile · docker-compose · Kubernetes YAML · GitHub Actions · Terraform · .env</span>
+            </label>
+            <button id="folder-btn" class="btn btn-ghost btn-block" type="button">Choose a whole folder…</button>
+            <input id="folder-input" type="file" webkitdirectory directory multiple hidden>
+          </div>
+
+          <div class="input-pane" data-pane="paste" hidden>
+            <label class="field-label" for="paste-name">File name (decides the file type)</label>
+            <div class="row">
+              <input id="paste-name" class="input mono" value="Dockerfile" list="name-presets" autocomplete="off">
+              <datalist id="name-presets">
+                <option value="Dockerfile"></option>
+                <option value="docker-compose.yml"></option>
+                <option value="deployment.yaml"></option>
+                <option value=".github/workflows/ci.yml"></option>
+                <option value="main.tf"></option>
+                <option value=".env"></option>
+              </datalist>
+            </div>
+            <label class="field-label" for="paste-content">Content</label>
+            <textarea id="paste-content" class="input mono" rows="10" spellcheck="false" placeholder="FROM python:latest&#10;RUN pip install -r requirements.txt&#10;CMD python app.py"></textarea>
+            <button id="paste-add" class="btn btn-ghost btn-block" type="button">Add to review</button>
+          </div>
+
+          <div class="input-pane" data-pane="examples" hidden>
+            <p class="muted">Bundled demo files. The insecure set has deliberately planted problems; the secure set is the hardened version of the same files.</p>
+            <button class="btn btn-ghost btn-block" data-example="insecure" type="button">Load insecure examples</button>
+            <button class="btn btn-ghost btn-block" data-example="secure" type="button">Load secure examples</button>
+          </div>
+
+          <div class="staged-head">
+            <h3>Files to review <span id="staged-count" class="count">0</span></h3>
+            <button id="clear-files" class="link-btn" type="button">Clear</button>
+          </div>
+          <ul id="staged" class="staged"><li class="empty">No files yet.</li></ul>
+
+          <h2 class="panel-title">2. Options</h2>
+          <label class="switch">
+            <input id="ai-toggle" type="checkbox">
+            <span class="switch-ui" aria-hidden="true"></span>
+            <span>AI deep review <span class="muted" id="ai-note"></span></span>
+          </label>
+          <label class="field-label" for="effort">AI effort</label>
+          <select id="effort" class="input">
+            <option value="low">Low (fastest)</option>
+            <option value="medium">Medium</option>
+            <option value="high" selected>High</option>
+            <option value="xhigh">Extra high</option>
+            <option value="max">Max (most thorough)</option>
+          </select>
+
+          <button id="run" class="btn btn-primary btn-block" type="button" disabled>Run review</button>
+          <p id="run-error" class="error" role="alert" hidden></p>
+        </aside>
+
+        <!-- ---------- Results ---------- -->
+        <section class="results" aria-live="polite">
+          <div id="results-empty" class="panel empty-state">
+            <h2>Review your DevOps configs in seconds</h2>
+            <p>Add files on the left, or load the <b>Examples</b> to see it in action. Each problem comes with its severity, line number and a concrete fix.</p>
+            <div class="feature-grid">
+              <div><b>6 file types</b><span>Dockerfile, compose, Kubernetes, GitHub Actions, Terraform, .env</span></div>
+              <div><b>74 rules</b><span>Security, misconfiguration, reliability and best practices</span></div>
+              <div><b>Secret detection</b><span>AWS keys, tokens, passwords; values are masked</span></div>
+              <div><b>AI review</b><span>Claude finds context issues the rules can't</span></div>
+            </div>
+          </div>
+
+          <div id="results" hidden>
+            <div class="panel summary">
+              <div class="score-ring" id="score-ring" role="img" aria-label="Score">
+                <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="ring-bg"/><circle cx="60" cy="60" r="52" class="ring-fg" id="ring-fg"/></svg>
+                <div class="score-text"><span id="score">0</span><small>/100</small></div>
+              </div>
+              <div class="summary-main">
+                <div class="grade-line"><span class="grade" id="grade">A</span><span id="summary-text"></span></div>
+                <div class="chips" id="sev-chips"></div>
+                <div class="toolbar">
+                  <label class="check"><input type="checkbox" id="only-ai"> AI findings only</label>
+                  <input id="search" class="input input-sm" placeholder="Filter findings…" aria-label="Filter findings">
+                  <div class="spacer"></div>
+                  <span class="muted">Download:</span>
+                  <button class="btn btn-sm" data-export="json" type="button">JSON</button>
+                  <button class="btn btn-sm" data-export="markdown" type="button">Markdown</button>
+                  <button class="btn btn-sm" data-export="sarif" type="button">SARIF</button>
+                </div>
+              </div>
+            </div>
+            <div id="messages"></div>
+            <div id="file-cards"></div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <!-- ============================== RULES ============================== -->
+    <section id="view-rules" class="view" hidden>
+      <div class="panel">
+        <div class="rules-head">
+          <h2>Built-in rules <span class="count" id="rule-count">0</span></h2>
+          <input id="rule-search" class="input input-sm" placeholder="Search rules…" aria-label="Search rules">
+          <select id="rule-type" class="input input-sm" aria-label="File type"><option value="">All file types</option></select>
+        </div>
+        <div class="table-wrap">
+          <table class="rules-table">
+            <thead><tr><th>ID</th><th>Severity</th><th>File type</th><th>Category</th><th>Check</th><th>Recommended fix</th></tr></thead>
+            <tbody id="rules-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== ABOUT ============================== -->
+    <section id="view-about" class="view" hidden>
+      <div class="panel prose">
+        <h2>How it works</h2>
+        <ol class="steps">
+          <li><b>Input.</b> Upload files, a folder, or paste a config. Files are reviewed in memory and never stored.</li>
+          <li><b>Detect.</b> Each file's type is decided from its name, then by sniffing YAML content (e.g. <code>apiVersion</code> + <code>kind</code> means Kubernetes).</li>
+          <li><b>Rule engine.</b> 74 deterministic checks across 6 file types, plus a secret scanner that runs on every file. Offline, instant and free.</li>
+          <li><b>AI review (optional).</b> Claude receives the file with line numbers and the rule findings, and is asked only for <i>new</i> issues. Its answer must match a strict JSON schema, so AI findings look exactly like rule findings.</li>
+          <li><b>Score.</b> Start at 100; subtract 25 per critical, 10 per high, 5 per medium and 2 per low finding. Grade A ≥ 90, B ≥ 75, C ≥ 60, D ≥ 40, else F.</li>
+          <li><b>Report.</b> View findings here or download JSON, Markdown or SARIF (for GitHub Code Scanning).</li>
+        </ol>
+        <h3>Command line</h3>
+        <pre class="code">python -m config_reviewer examples/insecure
+python -m config_reviewer . -f sarif -o results.sarif --fail-on high</pre>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">AI Config Reviewer <span id="version"></span> · rules for speed, AI for context</footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

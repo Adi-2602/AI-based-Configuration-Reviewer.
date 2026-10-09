@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 from .analyzers import analyzers_for
 from .detector import UNKNOWN, detect_file_type, discover_files
@@ -28,30 +28,26 @@ def review_text(path: str, text: str, file_type: Optional[str] = None) -> FileRe
     return report
 
 
-def review_paths(
-    paths: list[str],
+def review_sources(
+    sources: Iterable[tuple[str, str]],
     ai_reviewer=None,
     log: Logger = lambda _msg: None,
 ) -> ReviewResult:
-    """Review files/directories. ``ai_reviewer`` is an optional :class:`AIReviewer`."""
+    """Review in-memory ``(name, text)`` pairs. Used by the CLI and the web UI.
+
+    ``ai_reviewer`` is an optional :class:`~config_reviewer.ai_reviewer.AIReviewer`.
+    """
     from .ai_reviewer import AIReviewError, AIUnavailableError
 
     result = ReviewResult()
-    for file_path in discover_files(paths):
-        display = file_path.as_posix()
-        try:
-            text = Path(file_path).read_text(encoding="utf-8", errors="replace")
-        except OSError as exc:
-            result.files.append(FileReport(display, UNKNOWN, error=str(exc)))
-            continue
-
-        file_type = detect_file_type(file_path, text)
-        report = review_text(display, text, file_type)
+    for name, text in sources:
+        file_type = detect_file_type(name, text)
+        report = review_text(name, text, file_type)
 
         if ai_reviewer is not None and file_type != UNKNOWN:
-            log(f"AI reviewing {display} ...")
+            log(f"AI reviewing {name} ...")
             try:
-                ai = ai_reviewer.review(display, file_type, text, report.findings)
+                ai = ai_reviewer.review(name, file_type, text, report.findings)
                 report.ai_summary = ai.summary
                 report.findings.extend(ai.findings)
                 report.findings.sort(key=lambda f: (f.line or 0, -f.severity))
@@ -59,7 +55,27 @@ def review_paths(
                 log(f"AI review disabled: {exc}")
                 ai_reviewer = None
             except AIReviewError as exc:
-                log(f"AI review skipped for {display}: {exc}")
+                log(f"AI review skipped for {name}: {exc}")
 
         result.files.append(report)
+    return result
+
+
+def review_paths(
+    paths: list[str],
+    ai_reviewer=None,
+    log: Logger = lambda _msg: None,
+) -> ReviewResult:
+    """Review files/directories on disk."""
+    sources: list[tuple[str, str]] = []
+    unreadable: list[FileReport] = []
+    for file_path in discover_files(paths):
+        display = file_path.as_posix()
+        try:
+            sources.append((display, Path(file_path).read_text(encoding="utf-8", errors="replace")))
+        except OSError as exc:
+            unreadable.append(FileReport(display, UNKNOWN, error=str(exc)))
+
+    result = review_sources(sources, ai_reviewer=ai_reviewer, log=log)
+    result.files.extend(unreadable)
     return result
