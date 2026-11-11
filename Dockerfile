@@ -3,7 +3,8 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    CONFIG_REVIEWER_DB=/data/history.db
+    CONFIG_REVIEWER_DB=/data/history.db \
+    PORT=8000
 
 WORKDIR /app
 
@@ -21,5 +22,6 @@ USER appuser
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "2", "--threads", "4", "--timeout", "600", "config_reviewer.web.app:create_app()"]
+    CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/api/health' % os.environ.get('PORT', '8000'), timeout=3)"]
+# Cloud platforms (Render, Railway, ...) pass the port to listen on in $PORT.
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-8000} --workers 2 --threads 4 --timeout 600 'config_reviewer.web.app:create_app()'"]

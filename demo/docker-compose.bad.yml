@@ -1,0 +1,18 @@
+# INSECURE on purpose
+version: "3.8"
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.bad
+    ports:
+      - "5000:5000"
+    privileged: true
+    environment:
+      - ADMIN_PASSWORD=admin123
+  db:
+    image: postgres:latest
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: admin123

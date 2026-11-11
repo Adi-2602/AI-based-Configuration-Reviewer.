@@ -29,6 +29,8 @@ jobs:
         run: pytest -q
       - name: Secure examples must pass the reviewer
         run: python -m config_reviewer examples/secure --fail-on high
+      - name: Hardened demo files must pass the reviewer
+        run: python -m config_reviewer demo/Dockerfile.good demo/docker-compose.good.yml --fail-on low
 
   docker:
     name: Docker image build and smoke test

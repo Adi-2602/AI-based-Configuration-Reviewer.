@@ -138,7 +138,7 @@ Other options: `python -m config_reviewer.web --port 9000`. After `pip install -
 Privacy: each review's result and the reviewed file contents are saved in a local SQLite database
 (`~/.config_reviewer/history.db`, or the path in `CONFIG_REVIEWER_DB`) so the Dashboard can show them. You can delete
 reviews from the Dashboard, and `"save": false` in an API request skips saving. The server listens on `127.0.0.1`, so only your
-computer can reach it. It has no login, so don't expose it with `--host 0.0.0.0` on a shared network.
+computer can reach it. Before exposing it beyond your own computer, turn on the login (see below and [docs/DEPLOY.md](docs/DEPLOY.md)).
 
 **API** (used by the frontend; handy for scripts):
 
@@ -153,6 +153,20 @@ computer can reach it. It has no login, so don't expose it with `--host 0.0.0.0`
 | `GET /api/stats` | Dashboard aggregates |
 | `GET /api/health` | Health check used by Docker |
 | `POST /api/export` | Body `{"format": "markdown" \| "sarif" \| "json", "result": <review result>}` → report file |
+
+### 🎬 Demo files you can review *and* run
+
+The [`demo/`](demo/README.md) folder contains a tiny web app with an insecure and a hardened
+`Dockerfile` and `docker-compose` file. The reviewer gives the insecure Dockerfile 21/100 (grade F,
+14 issues) and the hardened one 100/100 (grade A); both images build and run, so you can show the
+difference live (root vs non-root user, no health check vs healthy, 1.66 GB vs 198 MB).
+See [demo/README.md](demo/README.md).
+
+### 🔐 Login and deployment
+
+Set `CONFIG_REVIEWER_USER` and `CONFIG_REVIEWER_PASSWORD` and every page except `/api/health` asks for
+that login, which is required before putting the app on the internet. The image listens on `$PORT`, so
+it runs as-is on Render, Railway or a cloud VM. Step-by-step instructions: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ### 🐳 Run it with Docker
 
@@ -526,10 +540,11 @@ AI-based-configuration-Reviewer/
 │       ├── github_actions.py     # GHA rules
 │       ├── terraform.py          # TF rules
 │       └── secrets.py            # SEC rules (runs on every file)
+├── demo/                         # runnable demo app with bad/good Dockerfile and compose files
 ├── examples/
 │   ├── insecure/                 # deliberately broken files: try the tool on these
 │   └── secure/                   # hardened versions: should produce no findings
-├── tests/                        # pytest suite (46 tests; AI layer tested with a fake client)
+├── tests/                        # pytest suite (48 tests; AI layer tested with a fake client)
 ├── docs/                         # sample outputs, rule list, web UI screenshot
 ├── .github/workflows/tests.yml   # CI: unit tests (3 Python versions) + Docker build and smoke test
 ├── Dockerfile, docker-compose.yml, .dockerignore   # container packaging

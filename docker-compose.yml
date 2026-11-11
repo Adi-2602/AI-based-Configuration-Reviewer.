@@ -7,6 +7,8 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CONFIG_REVIEWER_USER: ${CONFIG_REVIEWER_USER:-}
+      CONFIG_REVIEWER_PASSWORD: ${CONFIG_REVIEWER_PASSWORD:-}
     volumes:
       - review-history:/data
     restart: unless-stopped

@@ -21,7 +21,7 @@ class FakeAI:
 
 @pytest.fixture
 def client(tmp_path):
-    return create_app(ai_factory=lambda model, effort: FakeAI(), history=tmp_path / "h.db").test_client()
+    return create_app(ai_factory=lambda model, effort: FakeAI(), history=tmp_path / "h.db", login=None).test_client()
 
 
 def test_index_and_static(client):
@@ -64,7 +64,7 @@ def test_review_ai_unavailable():
     def boom(model, effort):
         raise AIUnavailableError("no key")
 
-    c = create_app(ai_factory=boom, history=False).test_client()
+    c = create_app(ai_factory=boom, history=False, login=None).test_client()
     data = c.post("/api/review", json={"files": [{"name": "Dockerfile", "content": DOCKERFILE}], "ai": True}).get_json()
     assert data["pipeline"]["ai"] == "unavailable"
     assert any("no key" in m for m in data["pipeline"]["messages"])
@@ -115,7 +115,7 @@ def test_history_saved_listed_reopened_and_deleted(client):
 
 
 def test_history_disabled(tmp_path):
-    c = create_app(history=False).test_client()
+    c = create_app(history=False, login=None).test_client()
     assert c.get("/api/status").get_json()["history"] is False
     assert c.get("/api/history").status_code == 404
     data = c.post("/api/review", json={"files": [{"name": "Dockerfile", "content": "FROM a:1"}]}).get_json()
@@ -131,3 +131,30 @@ def test_make_label():
     assert make_label(["Dockerfile"]) == "Dockerfile"
     assert make_label(["insecure/a", "insecure/b"]) == "insecure/ (2 files)"
     assert make_label(["a", "b", "c"]) == "3 files"
+
+
+def test_login_required_when_configured(tmp_path):
+    import base64
+
+    c = create_app(history=False, login=("admin", "s3cret-pass")).test_client()
+    assert c.get("/").status_code == 401
+    assert c.get("/api/rules").headers["WWW-Authenticate"].startswith("Basic")
+    assert c.get("/api/health").status_code == 200  # health checks never need a login
+
+    def auth(user, pw):
+        return {"Authorization": "Basic " + base64.b64encode(f"{user}:{pw}".encode()).decode()}
+
+    assert c.get("/api/rules", headers=auth("admin", "wrong")).status_code == 401
+    assert c.get("/api/rules", headers=auth("admin", "s3cret-pass")).status_code == 200
+
+
+def test_login_from_env(monkeypatch):
+    from config_reviewer.web.app import login_from_env
+
+    monkeypatch.delenv("CONFIG_REVIEWER_USER", raising=False)
+    monkeypatch.delenv("CONFIG_REVIEWER_PASSWORD", raising=False)
+    assert login_from_env() is None
+    monkeypatch.setenv("CONFIG_REVIEWER_USER", "admin")
+    assert login_from_env() is None  # both are needed
+    monkeypatch.setenv("CONFIG_REVIEWER_PASSWORD", "pw")
+    assert login_from_env() == ("admin", "pw")

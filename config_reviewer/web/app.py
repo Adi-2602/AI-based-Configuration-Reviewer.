@@ -12,7 +12,11 @@ GET  /api/history      recent saved reviews (summaries)
 GET  /api/history/<id> one saved review with its findings and file contents
 DELETE /api/history/<id>, DELETE /api/history   delete one / all saved reviews
 GET  /api/stats        aggregates for the dashboard
-GET  /api/health       liveness probe for Docker / load balancers
+GET  /api/health       liveness probe for Docker / load balancers (never needs a login)
+
+Optional login: when the environment variables CONFIG_REVIEWER_USER and CONFIG_REVIEWER_PASSWORD are
+both set, every page and endpoint except /api/health requires HTTP Basic authentication. Set them
+whenever the app is reachable from the internet.
 
 Uploaded files are reviewed in memory. Each review's result (and, up to 2 MB, the reviewed
 file contents, so a past review can be reopened) is saved in the local SQLite history unless
@@ -22,6 +26,7 @@ the request sets "save": false.
 from __future__ import annotations
 
 import argparse
+import hmac
 import os
 import sqlite3
 import time
@@ -148,14 +153,35 @@ def result_from_dict(data: dict) -> ReviewResult:
     return ReviewResult(files)
 
 
-def create_app(ai_factory: Optional[AIFactory] = None, history=None) -> Flask:
+def login_from_env() -> Optional[tuple[str, str]]:
+    user = os.environ.get("CONFIG_REVIEWER_USER", "")
+    password = os.environ.get("CONFIG_REVIEWER_PASSWORD", "")
+    return (user, password) if user and password else None
+
+
+def create_app(ai_factory: Optional[AIFactory] = None, history=None, login="env") -> Flask:
     """Build the Flask app.
 
     ``ai_factory(model, effort)`` is injectable for tests. ``history`` is a HistoryStore, a path
     for one, ``False`` to disable history, or ``None`` for the default database location.
+    ``login`` is a (user, password) pair, ``None`` for no login, or "env" to read
+    CONFIG_REVIEWER_USER / CONFIG_REVIEWER_PASSWORD.
     """
     app = Flask(__name__, static_folder=None)
     app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
+    credentials = login_from_env() if login == "env" else login
+
+    @app.before_request
+    def _require_login():
+        if credentials is None or request.path == "/api/health":
+            return None
+        auth = request.authorization
+        ok = (auth is not None and auth.type == "basic"
+              and hmac.compare_digest((auth.username or "").encode(), credentials[0].encode())
+              and hmac.compare_digest((auth.password or "").encode(), credentials[1].encode()))
+        if ok:
+            return None
+        return Response("Login required.", 401, {"WWW-Authenticate": 'Basic realm="AI Config Reviewer"'})
     make_ai = ai_factory or (lambda model, effort: AIReviewer(model=model, effort=effort))
     store: Optional[HistoryStore]
     if history is False:
@@ -312,11 +338,13 @@ def create_app(ai_factory: Optional[AIFactory] = None, history=None) -> Flask:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="config-reviewer-web", description="Start the web UI.")
     parser.add_argument("--host", default="127.0.0.1", help="Interface to bind (default: 127.0.0.1, local only)")
-    parser.add_argument("--port", type=int, default=8000, help="Port (default: 8000)")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8000)),
+                        help="Port (default: $PORT or 8000)")
     args = parser.parse_args(argv)
-    if args.host not in ("127.0.0.1", "localhost"):
-        print("warning: the server is reachable from other machines and has no login; "
-              "anyone who can reach it can use your AI credits.")
+    if args.host not in ("127.0.0.1", "localhost") and login_from_env() is None:
+        print("warning: the server is reachable from other machines and has no login; set "
+              "CONFIG_REVIEWER_USER and CONFIG_REVIEWER_PASSWORD, or anyone who can reach it can use it "
+              "(and your AI credits).")
     available, reason = ai_status()
     print(f"AI Config Reviewer {__version__} running at http://{args.host}:{args.port}  ({reason})")
     app = create_app()
