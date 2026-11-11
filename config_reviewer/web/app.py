@@ -8,20 +8,28 @@ GET  /api/rules        every built-in rule
 GET  /api/examples     the bundled insecure/secure example files
 POST /api/review       {"files": [{"name", "content"}], "ai": bool, "effort": str}
 POST /api/export       {"format": "markdown"|"sarif"|"json", "result": <review result>}
+GET  /api/history      recent saved reviews (summaries)
+GET  /api/history/<id> one saved review with its findings and file contents
+DELETE /api/history/<id>, DELETE /api/history   delete one / all saved reviews
+GET  /api/stats        aggregates for the dashboard
+GET  /api/health       liveness probe for Docker / load balancers
 
-Uploaded files are reviewed in memory only; nothing is written to disk.
+Uploaded files are reviewed in memory. Each review's result (and, up to 2 MB, the reviewed
+file contents, so a past review can be reopened) is saved in the local SQLite history unless
+the request sets "save": false.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import sqlite3
 import time
 from collections import Counter
 from pathlib import Path
 from typing import Callable, Optional
 
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, abort, jsonify, request, send_from_directory
 
 from .. import __version__
 from ..ai_reviewer import DEFAULT_EFFORT, DEFAULT_MODEL, AIReviewer, AIUnavailableError
@@ -30,6 +38,7 @@ from ..detector import ALL_TYPES, UNKNOWN, detect_file_type
 from ..models import FileReport, Finding, ReviewResult, Severity
 from ..reporters import render
 from ..reviewer import review_sources
+from .history import HistoryStore, default_db_path
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "examples"
@@ -139,11 +148,26 @@ def result_from_dict(data: dict) -> ReviewResult:
     return ReviewResult(files)
 
 
-def create_app(ai_factory: Optional[AIFactory] = None) -> Flask:
-    """Build the Flask app. ``ai_factory(model, effort)`` is injectable for tests."""
+def create_app(ai_factory: Optional[AIFactory] = None, history=None) -> Flask:
+    """Build the Flask app.
+
+    ``ai_factory(model, effort)`` is injectable for tests. ``history`` is a HistoryStore, a path
+    for one, ``False`` to disable history, or ``None`` for the default database location.
+    """
     app = Flask(__name__, static_folder=None)
     app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
     make_ai = ai_factory or (lambda model, effort: AIReviewer(model=model, effort=effort))
+    store: Optional[HistoryStore]
+    if history is False:
+        store = None
+    elif isinstance(history, HistoryStore):
+        store = history
+    else:
+        try:
+            store = HistoryStore(history)
+        except (OSError, sqlite3.Error) as exc:  # e.g. read-only filesystem: keep reviewing, skip history
+            app.logger.warning("Review history disabled: %s", exc)
+            store = None
 
     @app.errorhandler(BadRequest)
     def _bad_request(exc):
@@ -169,7 +193,12 @@ def create_app(ai_factory: Optional[AIFactory] = None) -> Flask:
             rule_count=sum(len(a.rules) for a in ANALYZERS),
             file_types=list(ALL_TYPES),
             ai={"available": available, "reason": reason, "model": DEFAULT_MODEL, "effort": DEFAULT_EFFORT},
+            history=store is not None,
         )
+
+    @app.get("/api/health")
+    def health():
+        return jsonify(status="ok")
 
     @app.get("/api/rules")
     def rules():
@@ -221,7 +250,49 @@ def create_app(ai_factory: Optional[AIFactory] = None) -> Flask:
             "messages": [m for m in messages if not m.startswith("AI reviewing")],
             "duration_ms": elapsed_ms,
         }
+        if store is not None and payload.get("save", True):
+            data["history_id"] = store.add(data, sources, ai_used=ai_state == "on")
         return jsonify(data)
+
+    def require_store() -> HistoryStore:
+        if store is None:
+            abort(404)
+        return store
+
+    @app.get("/api/history")
+    def history_list():
+        try:
+            limit = int(request.args.get("limit", 50))
+        except ValueError:
+            raise BadRequest("limit must be a number")
+        return jsonify(reviews=require_store().list(limit))
+
+    @app.get("/api/history/<int:review_id>")
+    def history_get(review_id: int):
+        item = require_store().get(review_id)
+        if item is None:
+            abort(404)
+        return jsonify(item)
+
+    @app.delete("/api/history/<int:review_id>")
+    def history_delete(review_id: int):
+        if not require_store().delete(review_id):
+            abort(404)
+        return jsonify(deleted=review_id)
+
+    @app.delete("/api/history")
+    def history_clear():
+        return jsonify(deleted=require_store().clear())
+
+    @app.get("/api/stats")
+    def stats():
+        return jsonify(require_store().stats())
+
+    @app.errorhandler(404)
+    def _not_found(_exc):
+        if request.path.startswith("/api/"):
+            return jsonify(error="Not found."), 404
+        return "Not found", 404
 
     @app.post("/api/export")
     def export():
@@ -248,5 +319,7 @@ def main(argv: list[str] | None = None) -> int:
               "anyone who can reach it can use your AI credits.")
     available, reason = ai_status()
     print(f"AI Config Reviewer {__version__} running at http://{args.host}:{args.port}  ({reason})")
-    create_app().run(host=args.host, port=args.port, debug=False)
+    app = create_app()
+    print(f"Review history: {default_db_path()}")
+    app.run(host=args.host, port=args.port, debug=False)
     return 0

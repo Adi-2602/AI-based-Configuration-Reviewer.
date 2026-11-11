@@ -21,6 +21,7 @@
     onlyAI: false,
     query: '',
     aiAvailable: false,
+    historyEnabled: true,
   };
 
   // ---------------------------------------------------------------- helpers
@@ -70,10 +71,12 @@
   }
 
   // ---------------------------------------------------------------- views
-  $$('.tab').forEach((tab) => tab.addEventListener('click', () => {
-    $$('.tab').forEach((t) => t.classList.toggle('active', t === tab));
-    $$('.view').forEach((v) => { v.hidden = v.id !== `view-${tab.dataset.view}`; });
-  }));
+  function showView(name) {
+    $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === name));
+    $$('.view').forEach((v) => { v.hidden = v.id !== `view-${name}`; });
+    if (name === 'dashboard') loadDashboard();
+  }
+  $$('.tab').forEach((tab) => tab.addEventListener('click', () => showView(tab.dataset.view)));
 
   $$('.seg-btn').forEach((btn) => btn.addEventListener('click', () => {
     $$('.seg-btn').forEach((b) => b.classList.toggle('active', b === btn));
@@ -433,6 +436,169 @@
     } catch (err) { showError(err.message); }
   }));
 
+  // ---------------------------------------------------------------- dashboard
+  const gradeColor = (score) => (score >= 90 ? '#1F9D55' : score >= 75 ? '#2D5BD7' : score >= 60 ? '#D29A0A' : score >= 40 ? '#E8590C' : '#C2312B');
+  const fmtDate = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+  const fmtNum = (n) => Number(n).toLocaleString();
+
+  async function loadDashboard() {
+    $('#dash-off').hidden = state.historyEnabled;
+    if (!state.historyEnabled) { $('#dash').hidden = true; $('#dash-empty').hidden = true; return; }
+    try {
+      const [stats, { reviews }] = await Promise.all([
+        api('/api/stats').then((r) => r.json()),
+        api('/api/history?limit=100').then((r) => r.json()),
+      ]);
+      $('#dash-empty').hidden = stats.reviews > 0;
+      $('#dash').hidden = stats.reviews === 0;
+      if (!stats.reviews) return;
+      $('#k-reviews').textContent = fmtNum(stats.reviews);
+      $('#k-files').textContent = fmtNum(stats.files);
+      $('#k-findings').textContent = fmtNum(stats.findings);
+      $('#k-score').textContent = stats.avg_score == null ? '–' : stats.avg_score;
+      $('#k-critical').textContent = fmtNum(stats.severity.CRITICAL);
+      renderTrend(stats.trend);
+      renderBars($('#sev-bars'), SEVERITIES.map((sev) => ({
+        label: h('span', {}, h('span', { class: `sev sev-${sev}`, text: sev })), value: stats.severity[sev], color: SEV_COLORS[sev],
+      })));
+      renderBars($('#rule-bars'), stats.top_rules.map((r) => ({
+        label: h('span', { title: `${r.rule_id}: ${r.title}` }, h('code', { text: r.rule_id }), r.title), value: r.count,
+      })));
+      renderBars($('#type-bars'), Object.entries(stats.file_types).map(([t, n]) => ({ label: TYPE_LABELS[t] || t, value: n })));
+      renderBars($('#cat-bars'), Object.entries(stats.categories).map(([c, n]) => ({ label: c, value: n })));
+      renderHistory(reviews);
+    } catch (err) {
+      $('#dash').hidden = true;
+      $('#dash-off').hidden = false;
+      $('#dash-off p').textContent = err.message;
+    }
+  }
+
+  function renderBars(container, items) {
+    container.replaceChildren();
+    if (!items.length) { container.append(h('div', { class: 'none', text: 'No data yet.' })); return; }
+    const max = Math.max(1, ...items.map((i) => i.value));
+    items.forEach((i) => {
+      const label = typeof i.label === 'string' ? h('span', { text: i.label }) : i.label;
+      container.append(h('div', { class: 'bar-row', title: `${label.textContent}: ${i.value}` },
+        h('span', { class: 'bar-label' }, label),
+        h('span', { class: 'bar-track', 'aria-hidden': 'true' },
+          h('span', { class: 'bar-fill', style: `display:block;width:${(i.value / max) * 100}%;${i.color ? `background:${i.color}` : ''}` })),
+        h('span', { class: 'bar-value', text: fmtNum(i.value) })));
+    });
+  }
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function svg(tag, attrs = {}) {
+    const el = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    return el;
+  }
+
+  function renderTrend(points) {
+    const box = $('#trend');
+    box.replaceChildren();
+    const W = Math.max(320, box.clientWidth || 800);
+    const H = 240;
+    const m = { l: 36, r: 12, t: 12, b: 26 };
+    const iw = W - m.l - m.r;
+    const ih = H - m.t - m.b;
+    const x = (i) => m.l + (points.length === 1 ? iw / 2 : (i / (points.length - 1)) * iw);
+    const y = (v) => m.t + ih - (v / 100) * ih;
+    const root = svg('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': `Score trend over the last ${points.length} reviews` });
+    const grid = svg('g', { class: 'grid' });
+    const axis = svg('g', { class: 'axis' });
+    [0, 25, 50, 75, 100].forEach((v) => {
+      grid.append(svg('line', { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v) }));
+      const t = svg('text', { x: m.l - 8, y: y(v) + 4, 'text-anchor': 'end' });
+      t.textContent = v;
+      axis.append(t);
+    });
+    const step = Math.max(1, Math.ceil(points.length / 8));
+    points.forEach((p, i) => {
+      if (i % step && i !== points.length - 1) return;
+      const t = svg('text', { x: x(i), y: H - 6, 'text-anchor': 'middle' });
+      t.textContent = `#${p.id}`;
+      axis.append(t);
+    });
+    root.append(grid, axis);
+    if (points.length > 1) {
+      const d = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.score).toFixed(1)}`).join(' ');
+      root.append(svg('path', { class: 'area', d: `${d} L${x(points.length - 1)},${y(0)} L${x(0)},${y(0)} Z` }));
+      root.append(svg('path', { class: 'line', d }));
+    }
+    const cross = svg('line', { class: 'cross', y1: m.t, y2: m.t + ih, x1: 0, x2: 0, visibility: 'hidden' });
+    root.append(cross);
+    const dots = points.map((p, i) => {
+      const c = svg('circle', { class: 'pt', cx: x(i), cy: y(p.score), r: 4 });
+      root.append(c);
+      return c;
+    });
+    const tip = h('div', { class: 'tip', hidden: true });
+    const slot = points.length > 1 ? iw / (points.length - 1) : iw;
+    points.forEach((p, i) => {
+      const hit = svg('rect', { class: 'hit', x: x(i) - slot / 2, y: m.t, width: slot, height: ih });
+      hit.addEventListener('mouseenter', () => {
+        dots.forEach((d, j) => d.setAttribute('r', j === i ? 6 : 4));
+        cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); cross.setAttribute('visibility', 'visible');
+        tip.replaceChildren(h('b', { text: `${p.score}/100 · grade ${p.grade}` }), h('br'),
+          `#${p.id} ${p.label}`, h('br'), h('span', { class: 'muted', text: fmtDate(p.created_at) }));
+        tip.style.left = `${(x(i) / W) * 100}%`;
+        tip.style.top = `${(y(p.score) / H) * box.clientHeight}px`;
+        tip.hidden = false;
+      });
+      hit.addEventListener('click', () => openReview(p.id));
+      root.append(hit);
+    });
+    root.addEventListener('mouseleave', () => {
+      tip.hidden = true; cross.setAttribute('visibility', 'hidden');
+      dots.forEach((d) => d.setAttribute('r', 4));
+    });
+    box.append(root, tip);
+  }
+
+  function renderHistory(reviews) {
+    $('#history-body').replaceChildren(...reviews.map((r) => {
+      const findings = SEVERITIES.flatMap((sev) => Array(r.counts[sev]).fill({ severity: sev }));
+      return h('tr', {},
+        h('td', { text: `#${r.id}` }),
+        h('td', { text: fmtDate(r.created_at) }),
+        h('td', { class: 'mono', text: r.label }),
+        h('td', { text: fmtNum(r.finding_count) }),
+        h('td', {}, sevBar(findings)),
+        h('td', {}, h('span', { class: 'grade-chip', style: `background:${gradeColor(r.score)}`, text: r.grade }), `${r.score}/100`),
+        h('td', { text: r.ai_used ? 'Yes' : 'No' }),
+        h('td', { class: 'actions' },
+          h('button', { class: 'btn btn-sm', type: 'button', onclick: () => openReview(r.id) }, 'Open'),
+          h('button', { class: 'btn btn-sm', type: 'button', 'aria-label': `Delete review ${r.id}`, onclick: async () => {
+            if (!window.confirm(`Delete review #${r.id}?`)) return;
+            await api(`/api/history/${r.id}`, { method: 'DELETE' });
+            loadDashboard();
+          } }, 'Delete')));
+    }));
+  }
+
+  $('#clear-history').addEventListener('click', async () => {
+    if (!window.confirm('Delete the whole review history?')) return;
+    await api('/api/history', { method: 'DELETE' });
+    loadDashboard();
+  });
+
+  async function openReview(id) {
+    try {
+      const item = await (await api(`/api/history/${id}`)).json();
+      state.result = item.result;
+      state.sources = new Map(Object.entries(item.sources || {}));
+      showView('review');
+      resetPipeline();
+      setStage('input', 'done', `${plural(item.file_count, 'file')} · saved #${id}`);
+      await animatePipeline(item.result, item.ai_used);
+      $('#file-cards').replaceChildren();
+      renderResults();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) { showError(err.message); }
+  }
+
   // ---------------------------------------------------------------- rules view
   let allRules = [];
   function renderRules() {
@@ -460,6 +626,7 @@
       $('#version').textContent = `v${status.version}`;
       $('#m-rules').textContent = `${status.rule_count} rules + secrets`;
       state.aiAvailable = status.ai.available;
+      state.historyEnabled = status.history !== false;
       const pill = $('#ai-pill');
       pill.textContent = status.ai.available ? `AI ready · ${status.ai.model}` : 'AI off · rules only';
       pill.className = `pill ${status.ai.available ? 'pill-on' : 'pill-muted'}`;

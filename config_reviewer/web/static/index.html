@@ -22,6 +22,7 @@
     </div>
     <nav class="tabs" role="tablist">
       <button class="tab active" data-view="review" role="tab">Review</button>
+      <button class="tab" data-view="dashboard" role="tab">Dashboard</button>
       <button class="tab" data-view="rules" role="tab">Rules</button>
       <button class="tab" data-view="about" role="tab">How it works</button>
     </nav>
@@ -153,6 +154,61 @@
             <div id="file-cards"></div>
           </div>
         </section>
+      </div>
+    </section>
+
+    <!-- ============================== DASHBOARD ============================== -->
+    <section id="view-dashboard" class="view" hidden>
+      <div id="dash-off" class="panel empty-state" hidden>
+        <h2>Review history is turned off</h2>
+        <p>The server could not open its history database, so past reviews are not saved.</p>
+      </div>
+      <div id="dash-empty" class="panel empty-state" hidden>
+        <h2>No reviews yet</h2>
+        <p>Every review you run is saved here. Go to <b>Review</b>, load the examples and press <b>Run review</b>.</p>
+      </div>
+      <div id="dash" hidden>
+        <div class="kpis">
+          <div class="kpi"><span class="kpi-label">Reviews run</span><span class="kpi-value" id="k-reviews">0</span></div>
+          <div class="kpi"><span class="kpi-label">Files scanned</span><span class="kpi-value" id="k-files">0</span></div>
+          <div class="kpi"><span class="kpi-label">Issues found</span><span class="kpi-value" id="k-findings">0</span></div>
+          <div class="kpi"><span class="kpi-label">Average score</span><span class="kpi-value" id="k-score">–</span></div>
+          <div class="kpi"><span class="kpi-label">Critical issues</span><span class="kpi-value" id="k-critical">0</span></div>
+        </div>
+        <div class="dash-grid">
+          <div class="panel chart-card wide">
+            <div class="chart-head"><h3>Score of recent reviews</h3><span class="muted">0–100, higher is safer · last 30 reviews</span></div>
+            <div class="trend" id="trend"></div>
+          </div>
+          <div class="panel chart-card">
+            <div class="chart-head"><h3>Issues by severity</h3><span class="muted">all reviews</span></div>
+            <div class="bars" id="sev-bars"></div>
+          </div>
+          <div class="panel chart-card">
+            <div class="chart-head"><h3>Most frequent problems</h3><span class="muted">top rules, last 200 reviews</span></div>
+            <div class="bars" id="rule-bars"></div>
+          </div>
+          <div class="panel chart-card">
+            <div class="chart-head"><h3>Files by type</h3><span class="muted">last 200 reviews</span></div>
+            <div class="bars" id="type-bars"></div>
+          </div>
+          <div class="panel chart-card">
+            <div class="chart-head"><h3>Issues by category</h3><span class="muted">last 200 reviews</span></div>
+            <div class="bars" id="cat-bars"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="rules-head">
+            <h2>Review history</h2>
+            <button id="clear-history" class="btn btn-sm" type="button">Delete all</button>
+          </div>
+          <div class="table-wrap">
+            <table class="rules-table history-table">
+              <thead><tr><th>#</th><th>When</th><th>Files reviewed</th><th>Issues</th><th>Severity mix</th><th>Score</th><th>AI</th><th></th></tr></thead>
+              <tbody id="history-body"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
 

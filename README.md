@@ -27,6 +27,8 @@ You can use it from the **command line** or from a **web frontend** in your brow
 
 ![Web UI: the review pipeline, score, severity filters and findings with fixes](docs/web-ui.png)
 
+![Dashboard: review history, score trend, issues by severity and most frequent problems](docs/dashboard.png)
+
 ---
 
 ## 📑 Table of contents
@@ -128,11 +130,14 @@ What you can do in it:
 | **See the code** | Click a finding to open the **Source** tab with the problem lines highlighted |
 | **Download** | JSON, Markdown or SARIF report |
 | **Browse rules** | The **Rules** tab lists all 74 rules with search and a file-type filter |
+| **Dashboard & history** | Every review is saved (SQLite). The **Dashboard** tab shows totals, a score trend, issues by severity, the most frequent problems, and a history table where you can reopen or delete past reviews |
 
 Other options: `python -m config_reviewer.web --port 9000`. After `pip install -e .`, the short command
 `config-reviewer-web` also works.
 
-Privacy: uploaded files are reviewed in memory and never saved. The server listens on `127.0.0.1`, so only your
+Privacy: each review's result and the reviewed file contents are saved in a local SQLite database
+(`~/.config_reviewer/history.db`, or the path in `CONFIG_REVIEWER_DB`) so the Dashboard can show them. You can delete
+reviews from the Dashboard, and `"save": false` in an API request skips saving. The server listens on `127.0.0.1`, so only your
 computer can reach it. It has no login, so don't expose it with `--host 0.0.0.0` on a shared network.
 
 **API** (used by the frontend; handy for scripts):
@@ -143,7 +148,27 @@ computer can reach it. It has no login, so don't expose it with `--host 0.0.0.0`
 | `GET /api/rules` | All rules |
 | `GET /api/examples` | The bundled example files |
 | `POST /api/review` | Body `{"files": [{"name": "Dockerfile", "content": "..."}], "ai": false}` → findings, score, grade |
+| `GET /api/history`, `GET /api/history/<id>` | Saved reviews (summaries / one full review) |
+| `DELETE /api/history/<id>`, `DELETE /api/history` | Delete one / all saved reviews |
+| `GET /api/stats` | Dashboard aggregates |
+| `GET /api/health` | Health check used by Docker |
 | `POST /api/export` | Body `{"format": "markdown" \| "sarif" \| "json", "result": <review result>}` → report file |
+
+### 🐳 Run it with Docker
+
+```bash
+docker compose up --build
+```
+
+Then open **http://127.0.0.1:8000**. The image runs the app with gunicorn as a non-root user, has a health check,
+and keeps the review history in the `review-history` volume. To enable AI review, set `ANTHROPIC_API_KEY` in your
+shell before running `docker compose up`; compose passes it into the container.
+
+Without compose: `docker build -t ai-config-reviewer .` then
+`docker run -p 127.0.0.1:8000:8000 -v review-history:/data ai-config-reviewer`.
+
+The project's own `Dockerfile` and `docker-compose.yml` pass the reviewer with grade A, and CI checks that on every
+push.
 
 ---
 
@@ -490,6 +515,7 @@ AI-based-configuration-Reviewer/
 │   ├── reporters.py              # text / json / markdown / sarif output
 │   ├── web/                      # web frontend
 │   │   ├── app.py                # Flask server + JSON API
+│   │   ├── history.py            # SQLite review history + dashboard statistics
 │   │   └── static/               # index.html, app.css, app.js (no build step)
 │   └── analyzers/
 │       ├── __init__.py           # analyzer registry
@@ -503,9 +529,10 @@ AI-based-configuration-Reviewer/
 ├── examples/
 │   ├── insecure/                 # deliberately broken files: try the tool on these
 │   └── secure/                   # hardened versions: should produce no findings
-├── tests/                        # pytest suite (42 tests; AI layer tested with a fake client)
+├── tests/                        # pytest suite (46 tests; AI layer tested with a fake client)
 ├── docs/                         # sample outputs, rule list, web UI screenshot
-├── .github/workflows/tests.yml   # CI for this repo
+├── .github/workflows/tests.yml   # CI: unit tests (3 Python versions) + Docker build and smoke test
+├── Dockerfile, docker-compose.yml, .dockerignore   # container packaging
 ├── pyproject.toml                # packaging + `config-reviewer` / `config-reviewer-web` commands
 ├── requirements.txt / requirements-dev.txt
 └── LICENSE (MIT)

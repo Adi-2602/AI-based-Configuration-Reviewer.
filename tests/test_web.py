@@ -20,8 +20,8 @@ class FakeAI:
 
 
 @pytest.fixture
-def client():
-    return create_app(ai_factory=lambda model, effort: FakeAI()).test_client()
+def client(tmp_path):
+    return create_app(ai_factory=lambda model, effort: FakeAI(), history=tmp_path / "h.db").test_client()
 
 
 def test_index_and_static(client):
@@ -64,7 +64,7 @@ def test_review_ai_unavailable():
     def boom(model, effort):
         raise AIUnavailableError("no key")
 
-    c = create_app(ai_factory=boom).test_client()
+    c = create_app(ai_factory=boom, history=False).test_client()
     data = c.post("/api/review", json={"files": [{"name": "Dockerfile", "content": DOCKERFILE}], "ai": True}).get_json()
     assert data["pipeline"]["ai"] == "unavailable"
     assert any("no key" in m for m in data["pipeline"]["messages"])
@@ -89,3 +89,45 @@ def test_export_round_trip(client):
     sarif = json.loads(client.post("/api/export", json={"format": "sarif", "result": result}).data)
     assert sarif["version"] == "2.1.0"
     assert client.post("/api/export", json={"format": "pdf", "result": result}).status_code == 400
+
+
+def test_history_saved_listed_reopened_and_deleted(client):
+    first = client.post("/api/review", json={"files": [{"name": "Dockerfile", "content": DOCKERFILE}]}).get_json()
+    client.post("/api/review", json={"files": [{"name": "Dockerfile", "content": "FROM a:1\nUSER 1\n"}], "ai": True})
+    client.post("/api/review", json={"files": [{"name": "Dockerfile", "content": DOCKERFILE}], "save": False})
+
+    reviews = client.get("/api/history").get_json()["reviews"]
+    assert len(reviews) == 2 and reviews[0]["ai_used"] is True
+    assert reviews[1]["id"] == first["history_id"] and reviews[1]["label"] == "Dockerfile"
+
+    item = client.get(f"/api/history/{first['history_id']}").get_json()
+    assert item["result"]["score"] == first["score"]
+    assert item["sources"]["Dockerfile"] == DOCKERFILE
+
+    stats = client.get("/api/stats").get_json()
+    assert stats["reviews"] == 2 and stats["top_rules"] and stats["file_types"]["dockerfile"] == 2
+    assert [p["id"] for p in stats["trend"]] == sorted(p["id"] for p in stats["trend"])
+
+    assert client.delete(f"/api/history/{first['history_id']}").status_code == 200
+    assert client.get(f"/api/history/{first['history_id']}").status_code == 404
+    assert client.delete("/api/history").get_json()["deleted"] == 1
+    assert client.get("/api/stats").get_json()["reviews"] == 0
+
+
+def test_history_disabled(tmp_path):
+    c = create_app(history=False).test_client()
+    assert c.get("/api/status").get_json()["history"] is False
+    assert c.get("/api/history").status_code == 404
+    data = c.post("/api/review", json={"files": [{"name": "Dockerfile", "content": "FROM a:1"}]}).get_json()
+    assert "history_id" not in data
+
+
+def test_health(client):
+    assert client.get("/api/health").get_json() == {"status": "ok"}
+
+
+def test_make_label():
+    from config_reviewer.web.history import make_label
+    assert make_label(["Dockerfile"]) == "Dockerfile"
+    assert make_label(["insecure/a", "insecure/b"]) == "insecure/ (2 files)"
+    assert make_label(["a", "b", "c"]) == "3 files"
